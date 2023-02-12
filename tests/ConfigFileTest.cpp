@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2022, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -435,6 +435,8 @@ TEST_CASE("StringBased: file_error", "[config]") {
     CHECK_THROWS_AS(CLI::ConfigINI().from_file("nonexist_file"), CLI::FileError);
 }
 
+static const int fclear1 = fileClear("TestIniTmp.ini");
+
 TEST_CASE_METHOD(TApp, "IniNotRequired", "[config]") {
 
     TempFile tmpini{"TestIniTmp.ini"};
@@ -507,8 +509,45 @@ TEST_CASE_METHOD(TApp, "IniGetRemainingOption", "[config]") {
     int two{0};
     app.add_option("--two", two);
     REQUIRE_NOTHROW(run());
-    std::vector<std::string> ExpectedRemaining = {ExtraOption};
+    std::vector<std::string> ExpectedRemaining = {ExtraOption, "3"};
     CHECK(ExpectedRemaining == app.remaining());
+}
+
+TEST_CASE_METHOD(TApp, "IniRemainingSub", "[config]") {
+    TempFile tmpini{"TestIniTmp.ini"};
+
+    app.set_config("--config", tmpini);
+    auto *map = app.add_subcommand("map");
+    map->allow_config_extras();
+
+    {
+        std::ofstream out{tmpini};
+        out << "[map]\n";
+        out << "a = 1\n";
+        out << "b=[1,2,3]\n";
+        out << "c = 3" << std::endl;
+    }
+
+    REQUIRE_NOTHROW(run());
+    std::vector<std::string> rem = map->remaining();
+    REQUIRE(rem.size() == 8U);
+    CHECK(rem[0] == "map.a");
+    CHECK(rem[2] == "map.b");
+    CHECK(rem[6] == "map.c");
+    CHECK(rem[5] == "3");
+
+    int a{0};
+    int c{0};
+    std::vector<int> b;
+    map->add_option("-a", a);
+    map->add_option("-b", b);
+    map->add_option("-c", c);
+
+    CHECK_NOTHROW(app.parse(app.remaining_for_passthrough()));
+    CHECK(a == 1);
+    CHECK(c == 3);
+    REQUIRE(b.size() == 3U);
+    CHECK(b[1] == 2);
 }
 
 TEST_CASE_METHOD(TApp, "IniGetNoRemaining", "[config]") {
@@ -594,6 +633,8 @@ TEST_CASE_METHOD(TApp, "IniNotRequiredbadConfigurator", "[config]") {
     app.add_option("--two", two);
     REQUIRE_NOTHROW(run());
 }
+
+static const int fclear2 = fileClear("TestIniTmp2.ini");
 
 TEST_CASE_METHOD(TApp, "IniNotRequiredNotDefault", "[config]") {
 
@@ -1017,17 +1058,19 @@ TEST_CASE_METHOD(TApp, "TOMLStringVector", "[config]") {
         out << "zero1=[]\n";
         out << "zero2={}\n";
         out << "zero3={}\n";
+        out << "zero4=[\"{}\",\"\"]\n";
         out << "nzero={}\n";
         out << "one=[\"1\"]\n";
         out << "two=[\"2\",\"3\"]\n";
         out << "three=[\"1\",\"2\",\"3\"]\n";
     }
 
-    std::vector<std::string> nzero, zero1, zero2, zero3, one, two, three;
+    std::vector<std::string> nzero, zero1, zero2, zero3, zero4, one, two, three;
     app.add_option("--zero1", zero1)->required()->expected(0, 99)->default_str("{}");
     app.add_option("--zero2", zero2)->required()->expected(0, 99)->default_val(std::vector<std::string>{});
     // if no default is specified the argument results in an empty string
     app.add_option("--zero3", zero3)->required()->expected(0, 99);
+    app.add_option("--zero4", zero4)->required()->expected(0, 99);
     app.add_option("--nzero", nzero)->required();
     app.add_option("--one", one)->required();
     app.add_option("--two", two)->required();
@@ -1038,6 +1081,7 @@ TEST_CASE_METHOD(TApp, "TOMLStringVector", "[config]") {
     CHECK(zero1 == std::vector<std::string>({}));
     CHECK(zero2 == std::vector<std::string>({}));
     CHECK(zero3 == std::vector<std::string>({""}));
+    CHECK(zero4 == std::vector<std::string>({"{}"}));
     CHECK(nzero == std::vector<std::string>({"{}"}));
     CHECK(one == std::vector<std::string>({"1"}));
     CHECK(two == std::vector<std::string>({"2", "3"}));
@@ -1735,6 +1779,23 @@ TEST_CASE_METHOD(TApp, "IniFlagDual", "[config]") {
     CHECK_THROWS_AS(run(), CLI::ConversionError);
 }
 
+TEST_CASE_METHOD(TApp, "IniVectorMax", "[config]") {
+
+    TempFile tmpini{"TestIniTmp.ini"};
+
+    std::vector<std::string> v1;
+    app.config_formatter(std::make_shared<CLI::ConfigINI>());
+    app.add_option("--vec", v1)->expected(0, 2);
+    app.set_config("--config", tmpini);
+
+    {
+        std::ofstream out{tmpini};
+        out << "vec=[a,b,c]" << std::endl;
+    }
+
+    CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
+}
+
 TEST_CASE_METHOD(TApp, "IniShort", "[config]") {
 
     TempFile tmpini{"TestIniTmp.ini"};
@@ -1998,6 +2059,51 @@ TEST_CASE_METHOD(TApp, "IniFalseFlagsDefDisableOverrideSuccess", "[config]") {
     CHECK(two == 2);
     CHECK(four == 4);
     CHECK(val == 15);
+}
+
+static const int fclear3 = fileClear("TestIniTmp3.ini");
+
+TEST_CASE_METHOD(TApp, "IniDisableFlagOverride", "[config]") {
+
+    TempFile tmpini{"TestIniTmp.ini"};
+    TempFile tmpini2{"TestIniTmp2.ini"};
+    TempFile tmpini3{"TestIniTmp3.ini"};
+
+    app.set_config("--config", tmpini);
+
+    {
+        std::ofstream out{tmpini};
+        out << "[default]" << std::endl;
+        out << "two=2" << std::endl;
+    }
+
+    {
+        std::ofstream out{tmpini2};
+        out << "[default]" << std::endl;
+        out << "two=7" << std::endl;
+    }
+
+    {
+        std::ofstream out{tmpini3};
+        out << "[default]" << std::endl;
+        out << "three=true" << std::endl;
+    }
+
+    int val{0};
+    app.add_flag("--one{1},--two{2},--three{3}", val)->disable_flag_override();
+
+    run();
+    CHECK(tmpini.c_str() == app["--config"]->as<std::string>());
+    CHECK(val == 2);
+
+    args = {"--config", tmpini2};
+    CHECK_THROWS_AS(run(), CLI::ArgumentMismatch);
+
+    args = {"--config", tmpini3};
+    run();
+
+    CHECK(val == 3);
+    CHECK(tmpini3.c_str() == app.get_config_ptr()->as<std::string>());
 }
 
 TEST_CASE_METHOD(TApp, "TomlOutputSimple", "[config]") {

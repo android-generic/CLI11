@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2022, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -61,7 +61,7 @@ class Config {
         if(item.inputs.empty()) {
             return "{}";
         }
-        throw ConversionError::TooManyInputsFlag(item.fullname());
+        throw ConversionError::TooManyInputsFlag(item.fullname());  // LCOV_EXCL_LINE
     }
 
     /// Parse a config file, throw an error (ParseError:ConfigParseError or FileError) on failure

@@ -1,5 +1,75 @@
 # Changelog
 
+## Version 2.3: Precompilation Support
+
+This version adds a pre-compiled mode to CLI11, which allows you to precompile
+the library, saving time on incremental rebuilds, making CLI11 more competitive
+on compile time with classic compiled CLI libraries. The header-only mode is
+still default, and is not yet distributed via binaries.
+
+- Add `CLI11_PRECOMPILED` as an option. [#762][]
+- Bugfix: Include `<functional>` in `FormatterFwd` [#727][]
+- Bugfix: Add missing `Macros.hpp` to `Error.hpp` [#755][]
+- Bugfix: Fix subcommand callback trigger [#733][]
+- Bugfix: Variable rename to avoid warning [#734][]
+- Bugfix: `split_program_name` single file name error [#740][]
+- Bugfix: Better support for min/max overrides on MSVC [#741][]
+- Bugfix: Support MSVC 2022 [#748][]
+- Bugfix: Support negated flag in config file [#775][]
+- Bugfix: Better errors for some confusing config file situations [#781][]
+- Backend: Restore coverage testing (lost with Travis CI) [#747][]
+
+[#727]: https://github.com/CLIUtils/CLI11/pull/727
+[#733]: https://github.com/CLIUtils/CLI11/pull/733
+[#734]: https://github.com/CLIUtils/CLI11/pull/734
+[#740]: https://github.com/CLIUtils/CLI11/pull/740
+[#741]: https://github.com/CLIUtils/CLI11/pull/741
+[#747]: https://github.com/CLIUtils/CLI11/pull/747
+[#748]: https://github.com/CLIUtils/CLI11/pull/748
+[#755]: https://github.com/CLIUtils/CLI11/pull/755
+[#762]: https://github.com/CLIUtils/CLI11/pull/762
+[#775]: https://github.com/CLIUtils/CLI11/pull/775
+[#781]: https://github.com/CLIUtils/CLI11/pull/781
+
+### Version 2.3.1: Missing implementation
+
+A function implementation was missing after the pre-compile move, missed due to
+the fact we lost 100% after losing coverage checking. We are working on filling
+out 100% coverage again to ensure this doesn't happen again!
+
+- Bugfix: `App::get_option_group` implementation missing [#793][]
+- Bugfix: Fix spacing when setting an empty footer [#796][]
+- Bugfix: Address Klocwork static analysis checking issues [#785][]
+
+[#785]: https://github.com/CLIUtils/CLI11/pull/785
+[#793]: https://github.com/CLIUtils/CLI11/pull/793
+[#796]: https://github.com/CLIUtils/CLI11/pull/796
+
+### Version 2.3.2: Minor maintenance
+
+This version provides a few fixes collected over the last three months before
+adding features for 2.4.
+
+- Bugfix: Consistently use ADL for `lexical_cast`, making it easier to extend
+  for custom template types [#820][]
+- Bugfix: Tweak the parsing of files for flags with `disable_flag_override`
+  [#800][]
+- Bugfix: Handle out of bounds long long [#807][]
+- Bugfix: Spacing of `make_description` min option output [#808][]
+- Bugfix: Print last parsed subcommand's help message [#822][]
+- Bugfix: Avoid floating point warning in GCC 12 [#803][]
+- Bugfix: Fix a few gcc warnings [#813][]
+- Backend: Max CMake tested 3.22 -> 3.24 [#823][]
+
+[#800]: https://github.com/CLIUtils/CLI11/pull/800
+[#803]: https://github.com/CLIUtils/CLI11/pull/803
+[#807]: https://github.com/CLIUtils/CLI11/pull/807
+[#808]: https://github.com/CLIUtils/CLI11/pull/808
+[#813]: https://github.com/CLIUtils/CLI11/pull/813
+[#820]: https://github.com/CLIUtils/CLI11/pull/820
+[#822]: https://github.com/CLIUtils/CLI11/pull/822
+[#823]: https://github.com/CLIUtils/CLI11/pull/823
+
 ## Version 2.2: Option and Configuration Flexibility
 
 New features include support for output of an empty vector, a summing option

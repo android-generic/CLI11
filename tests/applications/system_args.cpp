@@ -5,13 +5,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include <CLI/CLI.hpp>
+#include <cstring>
 
 int main(int argc, char **argv) {
-    CLI::App app{"App description"};
+    if(argc != CLI::argc()) {
+        return -1;
+    }
 
-    std::string filename = "default";
-    app.add_option("-f,--file", filename, "A help string");
+    for(int i = 0; i < argc; i++) {
+        if(std::strcmp(argv[i], CLI::argv()[i]) != 0) {
+            return i + 1;
+        }
+    }
 
-    CLI11_PARSE(app, argc, argv);
     return 0;
 }

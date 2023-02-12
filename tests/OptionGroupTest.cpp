@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2022, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -446,6 +446,12 @@ TEST_CASE_METHOD(ManyGroups, "SingleGroup", "[optiongroup]") {
     args = {"--name1", "test", "--val2", "tval"};
 
     CHECK_THROWS_AS(run(), CLI::RequiredError);
+}
+
+TEST_CASE_METHOD(ManyGroups, "getGroup", "[optiongroup]") {
+    auto *mn = app.get_option_group("main");
+    CHECK(mn == main);
+    CHECK_THROWS_AS(app.get_option_group("notfound"), CLI::OptionNotFound);
 }
 
 TEST_CASE_METHOD(ManyGroups, "ExcludesGroup", "[optiongroup]") {

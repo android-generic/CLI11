@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2022, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -7,6 +7,7 @@
 #include "app_helper.hpp"
 #include <cmath>
 
+#include <array>
 #include <complex>
 #include <cstdint>
 #include <cstdlib>
@@ -261,6 +262,28 @@ TEST_CASE_METHOD(TApp, "OneString", "[app]") {
     CHECK("mystring" == str);
 }
 
+TEST_CASE_METHOD(TApp, "OneWideString", "[app]") {
+    std::wstring str;
+    app.add_option("-s,--string", str);
+    args = {"--string", "mystring"};
+    run();
+    CHECK(app.count("-s") == 1u);
+    CHECK(app.count("--string") == 1u);
+    CHECK(L"mystring" == str);
+}
+
+TEST_CASE_METHOD(TApp, "OneStringWideInput", "[app][unicode]") {
+    std::string str;
+    app.add_option("-s,--string", str);
+
+    std::array<const wchar_t *, 3> cmdline{{L"app", L"--string", L"mystring"}};
+    app.parse(static_cast<int>(cmdline.size()), cmdline.data());
+
+    CHECK(app.count("-s") == 1u);
+    CHECK(app.count("--string") == 1u);
+    CHECK("mystring" == str);
+}
+
 TEST_CASE_METHOD(TApp, "OneStringWindowsStyle", "[app]") {
     std::string str;
     app.add_option("-s,--string", str);
@@ -277,6 +300,16 @@ TEST_CASE_METHOD(TApp, "OneStringSingleStringInput", "[app]") {
     app.add_option("-s,--string", str);
 
     app.parse("--string mystring");
+    CHECK(app.count("-s") == 1u);
+    CHECK(app.count("--string") == 1u);
+    CHECK("mystring" == str);
+}
+
+TEST_CASE_METHOD(TApp, "OneStringSingleWideStringInput", "[app][unicode]") {
+    std::string str;
+    app.add_option("-s,--string", str);
+
+    app.parse(L"--string mystring");
     CHECK(app.count("-s") == 1u);
     CHECK(app.count("--string") == 1u);
     CHECK("mystring" == str);
@@ -981,7 +1014,9 @@ TEST_CASE_METHOD(TApp, "emptyVectorReturn", "[app]") {
 
     std::vector<std::string> strs;
     std::vector<std::string> strs2;
+    std::vector<std::string> strs3;
     auto *opt1 = app.add_option("--str", strs)->required()->expected(0, 2);
+    app.add_option("--str3", strs3)->expected(1, 3);
     app.add_option("--str2", strs2);
     args = {"--str"};
 
@@ -1004,6 +1039,11 @@ TEST_CASE_METHOD(TApp, "emptyVectorReturn", "[app]") {
 
     CHECK_NOTHROW(run());
     CHECK(strs.empty());
+    opt1->required(false);
+    args = {"--str3", "{}"};
+
+    CHECK_NOTHROW(run());
+    CHECK_FALSE(strs3.empty());
 }
 
 TEST_CASE_METHOD(TApp, "RequiredOptsDoubleShort", "[app]") {
@@ -1988,6 +2028,31 @@ TEST_CASE_METHOD(TApp, "typeCheck", "[app]") {
     CHECK_THROWS_AS(run(), CLI::ValidationError);
 }
 
+TEST_CASE_METHOD(TApp, "NeedsTrue", "[app]") {
+    std::string str;
+    app.add_option("-s,--string", str);
+    app.add_flag("--opt1")->check([&](const std::string &) {
+        return (str != "val_with_opt1") ? std::string("--opt1 requires --string val_with_opt1") : std::string{};
+    });
+
+    run();
+
+    args = {"--opt1"};
+    CHECK_THROWS_AS(run(), CLI::ValidationError);
+
+    args = {"--string", "val"};
+    run();
+
+    args = {"--string", "val", "--opt1"};
+    CHECK_THROWS_AS(run(), CLI::ValidationError);
+
+    args = {"--string", "val_with_opt1", "--opt1"};
+    run();
+
+    args = {"--opt1", "--string", "val_with_opt1"};  // order is not revelant
+    run();
+}
+
 // Check to make sure programmatic access to left over is available
 TEST_CASE_METHOD(TApp, "AllowExtras", "[app]") {
 
@@ -2086,21 +2151,23 @@ TEST_CASE_METHOD(TApp, "AllowExtrasArgModify", "[app]") {
 TEST_CASE_METHOD(TApp, "CheckShortFail", "[app]") {
     args = {"--two"};
 
-    CHECK_THROWS_AS(CLI::detail::AppFriend::parse_arg(&app, args, CLI::detail::Classifier::SHORT), CLI::HorribleError);
+    CHECK_THROWS_AS(CLI::detail::AppFriend::parse_arg(&app, args, CLI::detail::Classifier::SHORT, false),
+                    CLI::HorribleError);
 }
 
 // Test horrible error
 TEST_CASE_METHOD(TApp, "CheckLongFail", "[app]") {
     args = {"-t"};
 
-    CHECK_THROWS_AS(CLI::detail::AppFriend::parse_arg(&app, args, CLI::detail::Classifier::LONG), CLI::HorribleError);
+    CHECK_THROWS_AS(CLI::detail::AppFriend::parse_arg(&app, args, CLI::detail::Classifier::LONG, false),
+                    CLI::HorribleError);
 }
 
 // Test horrible error
 TEST_CASE_METHOD(TApp, "CheckWindowsFail", "[app]") {
     args = {"-t"};
 
-    CHECK_THROWS_AS(CLI::detail::AppFriend::parse_arg(&app, args, CLI::detail::Classifier::WINDOWS_STYLE),
+    CHECK_THROWS_AS(CLI::detail::AppFriend::parse_arg(&app, args, CLI::detail::Classifier::WINDOWS_STYLE, false),
                     CLI::HorribleError);
 }
 
@@ -2108,7 +2175,8 @@ TEST_CASE_METHOD(TApp, "CheckWindowsFail", "[app]") {
 TEST_CASE_METHOD(TApp, "CheckOtherFail", "[app]") {
     args = {"-t"};
 
-    CHECK_THROWS_AS(CLI::detail::AppFriend::parse_arg(&app, args, CLI::detail::Classifier::NONE), CLI::HorribleError);
+    CHECK_THROWS_AS(CLI::detail::AppFriend::parse_arg(&app, args, CLI::detail::Classifier::NONE, false),
+                    CLI::HorribleError);
 }
 
 // Test horrible error
@@ -2427,4 +2495,22 @@ TEST_CASE("C20_compile", "simple") {
 
     app.parse("--flag");
     CHECK_FALSE(flag->empty());
+}
+
+// #14
+TEST_CASE("System Args", "[app]") {
+    const char *commandline = CLI11_SYSTEM_ARGS_EXE " 1234 false \"hello world\"";
+    int retval = std::system(commandline);
+
+    if(retval == -1) {
+        FAIL("Executable '" << commandline << "' reported different argc count");
+    }
+
+    if(retval > 0) {
+        FAIL("Executable '" << commandline << "' reported different argv at index " << (retval - 1));
+    }
+
+    if(retval != 0) {
+        FAIL("Executable '" << commandline << "' failed with an unknown return code");
+    }
 }

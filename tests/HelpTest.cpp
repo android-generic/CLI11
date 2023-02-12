@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2022, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -24,6 +24,43 @@ TEST_CASE("THelp: Basic", "[help]") {
     CHECK_THAT(help, Contains("-h,--help"));
     CHECK_THAT(help, Contains("Options:"));
     CHECK_THAT(help, Contains("Usage:"));
+}
+
+TEST_CASE("THelp: Usage", "[help]") {
+    CLI::App app{"My prog"};
+    app.usage("use: just use it");
+
+    std::string help = app.help();
+
+    CHECK_THAT(help, Contains("My prog"));
+    CHECK_THAT(help, Contains("-h,--help"));
+    CHECK_THAT(help, Contains("Options:"));
+    CHECK_THAT(help, Contains("use: just use it"));
+}
+
+TEST_CASE("THelp: UsageCallback", "[help]") {
+    CLI::App app{"My prog"};
+    app.usage([]() { return "use: just use it"; });
+
+    std::string help = app.help();
+
+    CHECK_THAT(help, Contains("My prog"));
+    CHECK_THAT(help, Contains("-h,--help"));
+    CHECK_THAT(help, Contains("Options:"));
+    CHECK_THAT(help, Contains("use: just use it"));
+}
+
+TEST_CASE("THelp: UsageCallbackBoth", "[help]") {
+    CLI::App app{"My prog"};
+    app.usage([]() { return "use: just use it"; });
+    app.usage("like 1, 2, and 3");
+    std::string help = app.help();
+
+    CHECK_THAT(help, Contains("My prog"));
+    CHECK_THAT(help, Contains("-h,--help"));
+    CHECK_THAT(help, Contains("Options:"));
+    CHECK_THAT(help, Contains("use: just use it"));
+    CHECK_THAT(help, Contains("like 1, 2, and 3"));
 }
 
 TEST_CASE("THelp: Footer", "[help]") {
@@ -813,7 +850,7 @@ TEST_CASE_METHOD(CapturedHelp, "CallForAllHelpOutput", "[help]") {
                        "  One description\n\n"
                        "two\n"
                        "  Options:\n"
-                       "    --three                     \n\n\n");
+                       "    --three                     \n\n");
 }
 TEST_CASE_METHOD(CapturedHelp, "NewFormattedHelp", "[help]") {
     app.formatter_fn([](const CLI::App *, std::string, CLI::AppFormatMode) { return "New Help"; });
@@ -972,6 +1009,16 @@ TEST_CASE("THelp: GroupOrder", "[help]") {
     CHECK(std::string::npos != zee_loc);
     CHECK(std::string::npos != aee_loc);
     CHECK(aee_loc > zee_loc);
+}
+
+TEST_CASE("THelp: GroupNameError", "[help]") {
+    CLI::App app;
+
+    auto *f1 = app.add_flag("--one");
+    auto *f2 = app.add_flag("--two");
+
+    CHECK_THROWS_AS(f1->group("evil group name\non two lines"), CLI::IncorrectConstruction);
+    CHECK_THROWS_AS(f2->group(std::string(5, '\0')), CLI::IncorrectConstruction);
 }
 
 TEST_CASE("THelp: ValidatorsText", "[help]") {

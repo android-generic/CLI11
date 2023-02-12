@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2022, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -75,7 +75,7 @@ CLI11_INLINE std::string Formatter::make_description(const App *app) const {
         if(min_options == 1) {
             desc += " \n[Exactly 1 of the following options is required]";
         } else {
-            desc += " \n[Exactly " + std::to_string(min_options) + "options from the following list are required]";
+            desc += " \n[Exactly " + std::to_string(min_options) + " options from the following list are required]";
         }
     } else if(max_options > 0) {
         if(min_options > 0) {
@@ -91,6 +91,11 @@ CLI11_INLINE std::string Formatter::make_description(const App *app) const {
 }
 
 CLI11_INLINE std::string Formatter::make_usage(const App *app, std::string name) const {
+    std::string usage = app->get_usage();
+    if(!usage.empty()) {
+        return usage + "\n";
+    }
+
     std::stringstream out;
 
     out << get_label("Usage") << ":" << (name.empty() ? "" : " ") << name;
@@ -137,7 +142,7 @@ CLI11_INLINE std::string Formatter::make_footer(const App *app) const {
     if(footer.empty()) {
         return std::string{};
     }
-    return footer + "\n";
+    return "\n" + footer + "\n";
 }
 
 CLI11_INLINE std::string Formatter::make_help(const App *app, std::string name, AppFormatMode mode) const {
@@ -159,7 +164,7 @@ CLI11_INLINE std::string Formatter::make_help(const App *app, std::string name, 
     out << make_positionals(app);
     out << make_groups(app, mode);
     out << make_subcommands(app, mode);
-    out << '\n' << make_footer(app);
+    out << make_footer(app);
 
     return out.str();
 }
