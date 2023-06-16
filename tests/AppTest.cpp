@@ -142,8 +142,6 @@ TEST_CASE_METHOD(TApp, "StrangeFlagNames", "[app]") {
 }
 
 TEST_CASE_METHOD(TApp, "RequireOptionsError", "[app]") {
-    using Catch::Matchers::Contains;
-
     app.add_flag("-c");
     app.add_flag("--q");
     app.add_flag("--this,--that");
@@ -1717,6 +1715,30 @@ TEST_CASE_METHOD(TApp, "FileExists", "[app]") {
     CHECK(!CLI::ExistingFile(myfile).empty());
 }
 
+#if defined CLI11_HAS_FILESYSTEM && CLI11_HAS_FILESYSTEM > 0 && defined(_MSC_VER)
+TEST_CASE_METHOD(TApp, "filesystemWideName", "[app]") {
+    std::filesystem::path myfile{L"voil\u20ac.txt"};
+
+    std::filesystem::path fpath;
+    app.add_option("--file", fpath)->check(CLI::ExistingFile, "existing file");
+
+    CHECK_THROWS_AS(app.parse(L"--file voil\u20ac.txt"), CLI::ValidationError);
+
+    bool ok = static_cast<bool>(std::ofstream(myfile).put('a'));  // create file
+    CHECK(ok);
+
+    // deactivate the check, so it should run now
+
+    CHECK_NOTHROW(app.parse(L"--file voil\u20ac.txt"));
+
+    CHECK(fpath == myfile);
+
+    CHECK(std::filesystem::exists(fpath));
+    std::filesystem::remove(myfile);
+    CHECK(!std::filesystem::exists(fpath));
+}
+#endif
+
 TEST_CASE_METHOD(TApp, "NotFileExists", "[app]") {
     std::string myfile{"TestNonFileNotUsed.txt"};
     CHECK(!CLI::ExistingFile(myfile).empty());
@@ -1976,6 +1998,28 @@ TEST_CASE_METHOD(TApp, "RangeDouble", "[app]") {
     double x{0.0};
     /// Note that this must be a double in Range, too
     app.add_option("--one", x)->check(CLI::Range(3.0, 6.0));
+
+    args = {"--one=1"};
+    CHECK_THROWS_AS(run(), CLI::ValidationError);
+
+    args = {"--one=7"};
+    CHECK_THROWS_AS(run(), CLI::ValidationError);
+
+    args = {"--one=3"};
+    run();
+
+    args = {"--one=5"};
+    run();
+
+    args = {"--one=6"};
+    run();
+}
+
+TEST_CASE_METHOD(TApp, "RangeFloat", "[app]") {
+
+    float x{0.0f};
+    /// Note that this must be a float in Range, too
+    app.add_option("--one", x, "testing floats")->check(CLI::Range(3.0, 6.0));
 
     args = {"--one=1"};
     CHECK_THROWS_AS(run(), CLI::ValidationError);
