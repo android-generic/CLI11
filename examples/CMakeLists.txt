@@ -99,7 +99,7 @@ add_test(NAME option_groups_missing COMMAND option_groups)
 set_property(TEST option_groups_missing PROPERTY PASS_REGULAR_EXPRESSION "Exactly 1 option from"
                                                  "is required")
 add_test(NAME option_groups_extra COMMAND option_groups --csv --binary)
-set_property(TEST option_groups_extra PROPERTY PASS_REGULAR_EXPRESSION "and 2 were given")
+set_property(TEST option_groups_extra PROPERTY PASS_REGULAR_EXPRESSION "but 2 were given")
 add_test(NAME option_groups_extra2 COMMAND option_groups --csv --address "192.168.1.1" -o
                                            "test.out")
 set_property(TEST option_groups_extra2 PROPERTY PASS_REGULAR_EXPRESSION "at most 1")
@@ -188,6 +188,12 @@ add_cli_exe(prefix_command prefix_command.cpp)
 add_test(NAME prefix_command COMMAND prefix_command -v 3 2 1 -- other one two 3)
 set_property(TEST prefix_command PROPERTY PASS_REGULAR_EXPRESSION "Prefix: 3 : 2 : 1"
                                           "Remaining commands: other one two 3")
+
+add_cli_exe(arg_capture arg_capture.cpp)
+add_test(NAME arg_capture COMMAND arg_capture -v 27 --sub -v 13 --val prefix)
+set_property(TEST arg_capture PROPERTY PASS_REGULAR_EXPRESSION "value=27")
+add_test(NAME arg_capture2 COMMAND arg_capture -v 27 --sub -v 13 --val prefix)
+set_property(TEST arg_capture2 PROPERTY PASS_REGULAR_EXPRESSION "after Args:-v 13 --val prefix")
 
 add_cli_exe(callback_passthrough callback_passthrough.cpp)
 add_test(NAME callback_passthrough1 COMMAND callback_passthrough --argname t2 --t2 test)

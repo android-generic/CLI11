@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2024, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -24,7 +24,7 @@ namespace CLI {
 class intWrapper64 {
   public:
     intWrapper64() = default;
-    explicit intWrapper64(int64_t v) : val(v){};
+    explicit intWrapper64(int64_t v) : val(v) {};
     CLI11_NODISCARD int64_t value() const { return val; }
 
   private:
@@ -34,7 +34,7 @@ class intWrapper64 {
 class doubleWrapper {
   public:
     doubleWrapper() = default;
-    explicit doubleWrapper(double v) : val(v){};
+    explicit doubleWrapper(double v) : val(v) {};
     CLI11_NODISCARD double value() const { return val; }
 
   private:
@@ -44,7 +44,7 @@ class doubleWrapper {
 class stringWrapper {
   public:
     stringWrapper() = default;
-    explicit stringWrapper(std::string_view v) : val(v){};
+    explicit stringWrapper(std::string_view v) : val(v) {};
     CLI11_NODISCARD std::string value() const { return val; }
 
   private:
@@ -75,6 +75,7 @@ class FuzzApp {
 
     std::vector<double> vv1{};
     std::vector<std::string> vstr{};
+
     std::vector<std::vector<double>> vecvecd{};
     std::vector<std::vector<std::string>> vvs{};
     std::optional<double> od1{};
@@ -103,5 +104,15 @@ class FuzzApp {
     std::string buffer{};
     int intbuffer{0};
     std::atomic<double> doubleAtomic{0.0};
+
+    // for testing restrictions and reduction methods
+    std::vector<std::string> vstrA{};
+    std::vector<std::string> vstrB{};
+    std::vector<std::string> vstrC{};
+    std::vector<std::string> vstrD{};
+    std::vector<std::string> vstrE{};
+    std::vector<std::string> vstrF{};
+    std::string mergeBuffer{};
+    std::vector<std::string> validator_strings{};
 };
 }  // namespace CLI

@@ -8,7 +8,9 @@ config flag. The second item is the default file name. If that is specified, the
 config will try to read that file. The third item is the help string, with a
 reasonable default, and the final argument is a boolean (default: false) that
 indicates that the configuration file is required and an error will be thrown if
-the file is not found and this is set to true.
+the file is not found and this is set to true. The option pointer returned by
+`set_config` is the same type as returned by `add_option` and all modifiers
+including validators, and checks are valid.
 
 ### Adding a default path
 
@@ -98,12 +100,29 @@ If it is needed to get the configuration file name used this can be obtained via
 `app["--config"]->as<std::string>()` assuming `--config` was the configuration
 option name.
 
+### Order of precedence
+
+By default if multiple configuration files are given they are read in reverse
+order. With the last one given taking precedence over the earlier ones. This
+behavior can be changed through the `multi_option_policy`. For example:
+
+```cpp
+app.set_config("--config")
+    ->multi_option_policy(CLI::MultiOptionPolicy::TakeAll);
+```
+
+will read the files in the order given, which may be useful in some
+circumstances. Using `CLI::MultiOptionPolicy::TakeLast` would work similarly
+getting the last `N` files given. The default policy for config options is
+`CLI::MultiOptionPolicy::Reverse` which takes the last expected `N` and reverses
+them so the last option given is given precedence.
+
 ## Configure file format
 
 Here is an example configuration file, in
 [TOML](https://github.com/toml-lang/toml) format:
 
-```ini
+```toml
 # Comments are supported, using a #
 # The default section is [default], case insensitive
 
@@ -147,6 +166,61 @@ sub.subcommand = true
 The main differences are in vector notation and comment character. Note: CLI11
 is not a full TOML parser as it just reads values as strings. It is possible
 (but not recommended) to mix notation.
+
+### Multi-line strings
+
+The default config file parser supports multi-line strings like the toml
+standard [TOML](https://toml.io/en/). It also supports multiline comments like
+python doc strings.
+
+```toml
+"""
+this is a multine
+comment
+"""
+
+""" this is also
+a multiline comment"""
+
+''' and so is
+this
+'''
+
+value = 1
+str = """
+this is a multiline string value
+the first \n is removed and so is the last
+"""
+
+str2 = ''' this is also a mu-
+ltiline value '''
+
+str3 = """\
+    a line continuation \
+    will skip \
+    all white space between the '\' \
+    and the next non-whitespace character \
+    making this into a single line
+"""
+
+```
+
+The key is that the closing of the multiline string must be at the end of a line
+and match the starting 3 quote sequence. Multiline sequences using `"""` allow
+escape sequences. Following [TOML](https://toml.io/en/v1.0.0#string) with the
+addition of allowing '\0' for a null character, and binary Strings described in
+the next section. This same formatting also applies to single line strings.
+Multiline strings are not allowed as part of an array.
+
+### Binary Strings
+
+Config files have a binary conversion capability, this is mainly to support
+writing config files but can be used by user generated files as well. Strings
+with the form `B"(XXXXX)"` will convert any characters inside the parenthesis
+with the form `\xHH` to the equivalent binary value. The HH are hexadecimal
+characters. Characters not in this form will be translated as given. If argument
+values with unprintable characters are used to generate a config file this
+binary form will be used in the output string.
 
 ## Multiple configuration files
 
@@ -206,8 +280,8 @@ char arraySeparator = ',';
 char valueDelimiter = '=';
 /// the character to use around strings
 char stringQuote = '"';
-/// the character to use around single characters
-char characterQuote = '\'';
+/// the character to use around single characters and literal strings
+char literalQuote = '\'';
 /// the maximum number of layers to allow
 uint8_t maximumLayers{255};
 /// the separator used to separator parent layers
@@ -228,8 +302,8 @@ These can be modified via setter functions
   an array
 - `ConfigBase *valueSeparator(char vSep)`: Specify the delimiter between a name
   and value
-- `ConfigBase *quoteCharacter(char qString, char qChar)` :specify the characters
-  to use around strings and single characters
+- `ConfigBase *quoteCharacter(char qString, char literalChar)` :specify the
+  characters to use around strings and single characters
 - `ConfigBase *maxLayers(uint8_t layers)` : specify the maximum number of parent
   layers to process. This is useful to limit processing for larger config files
 - `ConfigBase *parentSeparator(char sep)` : specify the character to separate
@@ -342,3 +416,6 @@ will create an option name in following priority.
 2. Positional name
 3. First short name
 4. Environment name
+
+In config files the name will be enclosed in quotes if there is any potential
+ambiguities in parsing the name.

@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2024, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -6,7 +6,10 @@
 
 #pragma once
 
+// IWYU pragma: private, include "CLI/CLI.hpp"
+
 // [CLI11:public_includes:set]
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <exception>
@@ -83,6 +86,23 @@ template <typename T> struct IsMemberType {
 template <> struct IsMemberType<const char *> {
     using type = std::string;
 };
+
+namespace adl_detail {
+/// Check for existence of user-supplied lexical_cast.
+///
+/// This struct has to be in a separate namespace so that it doesn't see our lexical_cast overloads in CLI::detail.
+/// Standard says it shouldn't see them if it's defined before the corresponding lexical_cast declarations, but this
+/// requires a working implementation of two-phase lookup, and not all compilers can boast that (msvc, ahem).
+template <typename T, typename S = std::string> class is_lexical_castable {
+    template <typename TT, typename SS>
+    static auto test(int) -> decltype(lexical_cast(std::declval<const SS &>(), std::declval<TT &>()), std::true_type());
+
+    template <typename, typename> static auto test(...) -> std::false_type;
+
+  public:
+    static constexpr bool value = decltype(test<T, S>(0))::value;
+};
+}  // namespace adl_detail
 
 namespace detail {
 
@@ -165,7 +185,7 @@ template <typename T, typename C> class is_direct_constructible {
 #pragma diag_suppress 2361
 #endif
 #endif
-        TT{std::declval<CC>()}
+                                              TT{std::declval<CC>()}
 #ifdef __CUDACC__
 #ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
 #pragma nv_diag_default 2361
@@ -173,8 +193,8 @@ template <typename T, typename C> class is_direct_constructible {
 #pragma diag_default 2361
 #endif
 #endif
-        ,
-        std::is_move_assignable<TT>());
+                                              ,
+                                              std::is_move_assignable<TT>());
 
     template <typename TT, typename CC> static auto test(int, std::false_type) -> std::false_type;
 
@@ -861,7 +881,7 @@ bool integral_conversion(const std::string &input, T &output) noexcept {
     if(input.empty() || input.front() == '-') {
         return false;
     }
-    char *val = nullptr;
+    char *val{nullptr};
     errno = 0;
     std::uint64_t output_ll = std::strtoull(input.c_str(), &val, 0);
     if(errno == ERANGE) {
@@ -876,6 +896,33 @@ bool integral_conversion(const std::string &input, T &output) noexcept {
     if(val == (input.c_str() + input.size())) {
         output = (output_sll < 0) ? static_cast<T>(0) : static_cast<T>(output_sll);
         return (static_cast<std::int64_t>(output) == output_sll);
+    }
+    // remove separators
+    if(input.find_first_of("_'") != std::string::npos) {
+        std::string nstring = input;
+        nstring.erase(std::remove(nstring.begin(), nstring.end(), '_'), nstring.end());
+        nstring.erase(std::remove(nstring.begin(), nstring.end(), '\''), nstring.end());
+        return integral_conversion(nstring, output);
+    }
+    if(input.compare(0, 2, "0o") == 0) {
+        val = nullptr;
+        errno = 0;
+        output_ll = std::strtoull(input.c_str() + 2, &val, 8);
+        if(errno == ERANGE) {
+            return false;
+        }
+        output = static_cast<T>(output_ll);
+        return (val == (input.c_str() + input.size()) && static_cast<std::uint64_t>(output) == output_ll);
+    }
+    if(input.compare(0, 2, "0b") == 0) {
+        val = nullptr;
+        errno = 0;
+        output_ll = std::strtoull(input.c_str() + 2, &val, 2);
+        if(errno == ERANGE) {
+            return false;
+        }
+        output = static_cast<T>(output_ll);
+        return (val == (input.c_str() + input.size()) && static_cast<std::uint64_t>(output) == output_ll);
     }
     return false;
 }
@@ -901,11 +948,38 @@ bool integral_conversion(const std::string &input, T &output) noexcept {
         output = static_cast<T>(1);
         return true;
     }
+    // remove separators
+    if(input.find_first_of("_'") != std::string::npos) {
+        std::string nstring = input;
+        nstring.erase(std::remove(nstring.begin(), nstring.end(), '_'), nstring.end());
+        nstring.erase(std::remove(nstring.begin(), nstring.end(), '\''), nstring.end());
+        return integral_conversion(nstring, output);
+    }
+    if(input.compare(0, 2, "0o") == 0) {
+        val = nullptr;
+        errno = 0;
+        output_ll = std::strtoll(input.c_str() + 2, &val, 8);
+        if(errno == ERANGE) {
+            return false;
+        }
+        output = static_cast<T>(output_ll);
+        return (val == (input.c_str() + input.size()) && static_cast<std::int64_t>(output) == output_ll);
+    }
+    if(input.compare(0, 2, "0b") == 0) {
+        val = nullptr;
+        errno = 0;
+        output_ll = std::strtoll(input.c_str() + 2, &val, 2);
+        if(errno == ERANGE) {
+            return false;
+        }
+        output = static_cast<T>(output_ll);
+        return (val == (input.c_str() + input.size()) && static_cast<std::int64_t>(output) == output_ll);
+    }
     return false;
 }
 
-/// Convert a flag into an integer value  typically binary flags
-inline std::int64_t to_flag_value(std::string val) {
+/// Convert a flag into an integer value  typically binary flags sets errno to nonzero if conversion failed
+inline std::int64_t to_flag_value(std::string val) noexcept {
     static const std::string trueString("true");
     static const std::string falseString("false");
     if(val == trueString) {
@@ -933,7 +1007,8 @@ inline std::int64_t to_flag_value(std::string val) {
             ret = 1;
             break;
         default:
-            throw std::invalid_argument("unrecognized character");
+            errno = EINVAL;
+            return -1;
         }
         return ret;
     }
@@ -942,7 +1017,11 @@ inline std::int64_t to_flag_value(std::string val) {
     } else if(val == falseString || val == "off" || val == "no" || val == "disable") {
         ret = -1;
     } else {
-        ret = std::stoll(val);
+        char *loc_ptr{nullptr};
+        ret = std::strtoll(val.c_str(), &loc_ptr, 0);
+        if(loc_ptr != (val.c_str() + val.size()) && errno == 0) {
+            errno = EINVAL;
+        }
     }
     return ret;
 }
@@ -971,18 +1050,16 @@ bool lexical_cast(const std::string &input, T &output) {
 template <typename T,
           enable_if_t<classify_object<T>::value == object_category::boolean_value, detail::enabler> = detail::dummy>
 bool lexical_cast(const std::string &input, T &output) {
-    try {
-        auto out = to_flag_value(input);
+    errno = 0;
+    auto out = to_flag_value(input);
+    if(errno == 0) {
         output = (out > 0);
-        return true;
-    } catch(const std::invalid_argument &) {
-        return false;
-    } catch(const std::out_of_range &) {
-        // if the number is out of the range of a 64 bit value then it is still a number and for this purpose is still
-        // valid all we care about the sign
+    } else if(errno == ERANGE) {
         output = (input[0] != '-');
-        return true;
+    } else {
+        return false;
     }
+    return true;
 }
 
 /// Floats
@@ -995,7 +1072,17 @@ bool lexical_cast(const std::string &input, T &output) {
     char *val = nullptr;
     auto output_ld = std::strtold(input.c_str(), &val);
     output = static_cast<T>(output_ld);
-    return val == (input.c_str() + input.size());
+    if(val == (input.c_str() + input.size())) {
+        return true;
+    }
+    // remove separators
+    if(input.find_first_of("_'") != std::string::npos) {
+        std::string nstring = input;
+        nstring.erase(std::remove(nstring.begin(), nstring.end(), '_'), nstring.end());
+        nstring.erase(std::remove(nstring.begin(), nstring.end(), '\''), nstring.end());
+        return lexical_cast(nstring, output);
+    }
+    return false;
 }
 
 /// complex
@@ -1177,13 +1264,24 @@ bool lexical_cast(const std::string &input, T &output) {
 
 /// Non-string parsable by a stream
 template <typename T,
-          enable_if_t<classify_object<T>::value == object_category::other && !std::is_assignable<T &, int>::value,
+          enable_if_t<classify_object<T>::value == object_category::other && !std::is_assignable<T &, int>::value &&
+                          is_istreamable<T>::value,
                       detail::enabler> = detail::dummy>
 bool lexical_cast(const std::string &input, T &output) {
-    static_assert(is_istreamable<T>::value,
+    return from_stream(input, output);
+}
+
+/// Fallback overload that prints a human-readable error for types that we don't recognize and that don't have a
+/// user-supplied lexical_cast overload.
+template <typename T,
+          enable_if_t<classify_object<T>::value == object_category::other && !std::is_assignable<T &, int>::value &&
+                          !is_istreamable<T>::value && !adl_detail::is_lexical_castable<T>::value,
+                      detail::enabler> = detail::dummy>
+bool lexical_cast(const std::string & /*input*/, T & /*output*/) {
+    static_assert(!std::is_same<T, T>::value,  // Can't just write false here.
                   "option object type must have a lexical cast overload or streaming input operator(>>) defined, if it "
                   "is convertible from another type use the add_option<T, XC>(...) with XC being the known type");
-    return from_stream(input, output);
+    return false;
 }
 
 /// Assign a value through lexical cast operations
@@ -1316,9 +1414,7 @@ bool lexical_conversion(const std::vector<std ::string> &strings, AssignTo &outp
     FirstType v1;
     SecondType v2;
     bool retval = lexical_assign<FirstType, FirstType>(strings[0], v1);
-    if(strings.size() > 1) {
-        retval = retval && lexical_assign<SecondType, SecondType>(strings[1], v2);
-    }
+    retval = retval && lexical_assign<SecondType, SecondType>((strings.size() > 1) ? strings[1] : std::string{}, v2);
     if(retval) {
         output = AssignTo{v1, v2};
     }
@@ -1333,6 +1429,9 @@ template <class AssignTo,
                       detail::enabler> = detail::dummy>
 bool lexical_conversion(const std::vector<std ::string> &strings, AssignTo &output) {
     output.erase(output.begin(), output.end());
+    if(strings.empty()) {
+        return true;
+    }
     if(strings.size() == 1 && strings[0] == "{}") {
         return true;
     }
@@ -1635,12 +1734,13 @@ inline std::string sum_string_vector(const std::vector<std::string> &values) {
         double tv{0.0};
         auto comp = lexical_cast(arg, tv);
         if(!comp) {
-            try {
-                tv = static_cast<double>(detail::to_flag_value(arg));
-            } catch(const std::exception &) {
-                fail = true;
+            errno = 0;
+            auto fv = detail::to_flag_value(arg);
+            fail = (errno != 0);
+            if(fail) {
                 break;
             }
+            tv = static_cast<double>(fv);
         }
         val += tv;
     }
@@ -1649,13 +1749,10 @@ inline std::string sum_string_vector(const std::vector<std::string> &values) {
             output.append(arg);
         }
     } else {
-        if(val <= static_cast<double>((std::numeric_limits<std::int64_t>::min)()) ||
-           val >= static_cast<double>((std::numeric_limits<std::int64_t>::max)()) ||
-           std::ceil(val) == std::floor(val)) {
-            output = detail::value_string(static_cast<int64_t>(val));
-        } else {
-            output = detail::value_string(val);
-        }
+        std::ostringstream out;
+        out.precision(16);
+        out << val;
+        output = out.str();
     }
     return output;
 }

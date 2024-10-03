@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2024, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -193,7 +193,7 @@ TEST_CASE_METHOD(TApp, "custom_string_converterFail", "[newparse]") {
     CHECK_THROWS_AS(run(), CLI::ConversionError);
 }
 
-/// Wrapper with an unconvenient interface
+/// Wrapper with an inconvenient interface
 template <class T> class badlywrapped {
   public:
     badlywrapped() : value() {}
@@ -281,6 +281,33 @@ TEST_CASE_METHOD(TApp, "custom_string_converter_specialize", "[newparse]") {
 
     run();
     CHECK("something!" == s.s);
+}
+
+/// Yet another wrapper to test that overloading lexical_cast with enable_if works.
+struct yetanotherstring {
+    yetanotherstring() = default;
+    std::string s{};
+};
+
+template <class T> struct is_my_lexical_cast_enabled : std::false_type {};
+
+template <> struct is_my_lexical_cast_enabled<yetanotherstring> : std::true_type {};
+
+template <class T, CLI::enable_if_t<is_my_lexical_cast_enabled<T>::value, CLI::detail::enabler> = CLI::detail::dummy>
+bool lexical_cast(const std::string &input, T &output) {
+    output.s = input;
+    return true;
+}
+
+TEST_CASE_METHOD(TApp, "custom_string_converter_adl_enable_if", "[newparse]") {
+    yetanotherstring s;
+
+    app.add_option("-s", s);
+
+    args = {"-s", "something"};
+
+    run();
+    CHECK("something" == s.s);
 }
 
 /// simple class to wrap another  with a very specific type constructor and assignment operators to test out some of the

@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2024, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -20,5 +20,6 @@ int main(int argc, char **argv) {
         (app)->exit(e);
         // this just indicates we caught an error known by CLI
     }
+
     return 0;
 }

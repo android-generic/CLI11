@@ -1,10 +1,12 @@
-// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2024, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
 #pragma once
+
+// IWYU pragma: private, include "CLI/CLI.hpp"
 
 // [CLI11:public_includes:set]
 #include <algorithm>
@@ -290,6 +292,14 @@ class App {
 
     ///@}
 
+#ifdef _WIN32
+    /// When normalizing argv to UTF-8 on Windows, this is the storage for normalized args.
+    std::vector<std::string> normalized_argv_{};
+
+    /// When normalizing argv to UTF-8 on Windows, this is the `char**` value returned to the user.
+    std::vector<char *> normalized_argv_view_{};
+#endif
+
     /// Special private constructor for subcommand
     App(std::string app_description, std::string app_name, App *parent);
 
@@ -308,6 +318,9 @@ class App {
 
     /// virtual destructor
     virtual ~App() = default;
+
+    /// Convert the contents of argv to UTF-8. Only does something on Windows, does nothing elsewhere.
+    CLI11_NODISCARD char **ensure_utf8(char **argv);
 
     /// Set a callback for execution when all parsing and processing has completed
     ///
@@ -722,6 +735,10 @@ class App {
     /// Check to see if a subcommand is part of this command (text version)
     CLI11_NODISCARD App *get_subcommand(std::string subcom) const;
 
+    /// Get a subcommand by name (noexcept non-const version)
+    /// returns null if subcommand doesn't exist
+    CLI11_NODISCARD App *get_subcommand_no_throw(std::string subcom) const noexcept;
+
     /// Get a pointer to subcommand by index
     CLI11_NODISCARD App *get_subcommand(int index = 0) const;
 
@@ -837,10 +854,6 @@ class App {
     /// Reset the parsed data
     void clear();
 
-    /// Parse the command-line arguments passed to the main function of the executable.
-    /// This overload will correctly parse unicode arguments on Windows.
-    void parse();
-
     /// Parses the command line - throws errors.
     /// This must be called after the options are in but before the rest of the program.
     void parse(int argc, const char *const *argv);
@@ -900,8 +913,9 @@ class App {
     }
 
     /// Check with name instead of pointer to see if subcommand was selected
-    CLI11_NODISCARD bool got_subcommand(std::string subcommand_name) const {
-        return get_subcommand(subcommand_name)->parsed_ > 0;
+    CLI11_NODISCARD bool got_subcommand(std::string subcommand_name) const noexcept {
+        App *sub = get_subcommand_no_throw(subcommand_name);
+        return (sub != nullptr) ? (sub->parsed_ > 0) : false;
     }
 
     /// Sets excluded options for the subcommand
@@ -1031,7 +1045,7 @@ class App {
     std::vector<Option *> get_options(const std::function<bool(Option *)> filter = {});
 
     /// Get an option by name (noexcept non-const version)
-    Option *get_option_no_throw(std::string option_name) noexcept;
+    CLI11_NODISCARD Option *get_option_no_throw(std::string option_name) noexcept;
 
     /// Get an option by name (noexcept const version)
     CLI11_NODISCARD const Option *get_option_no_throw(std::string option_name) const noexcept;
@@ -1222,6 +1236,9 @@ class App {
 
     /// Read and process a configuration file (main app only)
     void _process_config_file();
+
+    /// Read and process a particular configuration file
+    bool _process_config_file(const std::string &config_file, bool throw_error);
 
     /// Get envname options if not yet passed. Runs on *all* subcommands.
     void _process_env();
@@ -1427,5 +1444,5 @@ struct AppFriend {
 }  // namespace CLI
 
 #ifndef CLI11_COMPILE
-#include "impl/App_inl.hpp"
+#include "impl/App_inl.hpp"  // IWYU pragma: export
 #endif

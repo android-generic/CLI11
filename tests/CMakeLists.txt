@@ -1,10 +1,10 @@
-if(CLI11_SANITIZERS)
+if(CLI11_SANITIZERS AND ${CMAKE_VERSION} VERSION_GREATER "3.13.0")
   message(STATUS "Using arsenm/sanitizers-cmake")
   FetchContent_Declare(
     sanitizers
     GIT_REPOSITORY https://github.com/arsenm/sanitizers-cmake.git
     GIT_SHALLOW 1
-    GIT_TAG c3dc841)
+    GIT_TAG 3f0542e)
 
   FetchContent_GetProperties(sanitizers)
 
@@ -106,7 +106,7 @@ file(
   GLOB_RECURSE DATA_FILES
   LIST_DIRECTORIES false
   RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
-  "${CMAKE_CURRENT_SOURCE_DIR}/data/*")
+  "${CMAKE_CURRENT_SOURCE_DIR}/data/*" "${CMAKE_CURRENT_SOURCE_DIR}/tests/.gitkeep")
 
 foreach(DATA_FILE IN LISTS DATA_FILES)
   add_custom_command(
@@ -115,16 +115,21 @@ foreach(DATA_FILE IN LISTS DATA_FILES)
             "${CMAKE_CURRENT_BINARY_DIR}/${DATA_FILE}"
     MAIN_DEPENDENCY "${CMAKE_CURRENT_SOURCE_DIR}/${DATA_FILE}"
     VERBATIM)
-  target_sources(catch_main PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/${DATA_FILE}")
 endforeach()
+add_custom_target(cli11_test_data DEPENDS ${DATA_FILES})
+
+# Make a shim if we are building single file tests
+if(CLI11_SINGLE_FILE AND CLI11_INSTALL_PACKAGE_TESTS)
+  file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/test_single/CLI/CLI.hpp" "#include <CLI11.hpp>")
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/test_single/CLI/CLI.hpp" DESTINATION include/CLI)
+endif()
 
 # Build dependent applications which are launched from test code
-set(CLI11_DEPENDENT_APPLICATIONS system_args)
+set(CLI11_DEPENDENT_APPLICATIONS ensure_utf8 ensure_utf8_twice)
 
 foreach(APP IN LISTS CLI11_DEPENDENT_APPLICATIONS)
   add_executable(${APP} applications/${APP}.cpp)
   target_include_directories(${APP} PRIVATE ${CMAKE_SOURCE_DIR}/include)
-  add_dependencies(catch_main ${APP})
 endforeach()
 
 function(add_dependent_application_definitions TARGET)
@@ -138,6 +143,7 @@ endfunction()
 # Target must already exist
 macro(add_catch_test TESTNAME)
   target_link_libraries(${TESTNAME} PUBLIC catch_main)
+  add_dependencies(${TESTNAME} cli11_test_data)
 
   add_test(${TESTNAME} ${TESTNAME})
   set_target_properties(${TESTNAME} PROPERTIES FOLDER "Tests")
@@ -188,6 +194,18 @@ if(CMAKE_CXX_STANDARD GREATER 16)
     target_compile_definitions(FuzzFailTest_Single PUBLIC -DTEST_FILE_FOLDER="${TEST_FILE_FOLDER}")
     target_sources(FuzzFailTest_Single PUBLIC ${PROJECT_SOURCE_DIR}/fuzz/fuzzApp.cpp)
   endif()
+
+  # Some platforms need to link to atomic
+  file(WRITE "${CMAKE_BINARY_DIR}/test_atomic.cpp"
+       "#include <atomic>\n" "int main() { std::atomic<int64_t> i(0); i++; return 0; }\n")
+  try_compile(ATOMIC_BUILD_SUCCEEDED "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/test_atomic.cpp")
+  if(NOT ATOMIC_BUILD_SUCCEEDED)
+    target_link_libraries(FuzzFailTest PRIVATE atomic)
+    if(CLI11_SINGLE_FILE AND CLI11_SINGLE_FILE_TESTS)
+      target_link_libraries(FuzzFailTestSingle PRIVATE atomic)
+    endif()
+  endif()
+  file(REMOVE ${CMAKE_BINARY_DIR}/test_atomic.cpp)
 endif()
 
 # Add -Wno-deprecated-declarations to DeprecatedTest
@@ -276,4 +294,81 @@ if(CMAKE_BUILD_TYPE STREQUAL Coverage)
     DEPENDENCIES
     ${CLI11_TESTS}
     ${CLI11_MULTIONLY_TESTS})
+endif()
+
+set(CLI11_PACKAGE_SEARCH_LOC "")
+
+# tests of the cmake package and pkg-config package
+if(CLI11_INSTALL_PACKAGE_TESTS)
+  if(NOT MSVC)
+    set(package_test_command --test-command "${CMAKE_CTEST_COMMAND}")
+  else() # don't try to run the tests on MSVC since that would require copying the dll's and doing
+    # some other setup that isn't that important to run on all OS
+    set(package_test_command)
+  endif()
+
+  if(CMAKE_BUILD_TYPE)
+    set(CLI11_PACKAGE_TEST_BUILD_TYPE ${CMAKE_BUILD_TYPE})
+  else()
+    set(CLI11_PACKAGE_TEST_BUILD_TYPE Release)
+  endif()
+
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/find_package_tests")
+
+  if(MSVC AND ${CMAKE_VERSION} VERSION_GREATER 3.12.9)
+    # Tests for other CMake projects including and using CLI11 using find_package
+    add_test(
+      NAME find-package-testsA
+      COMMAND
+        ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" -A "${CMAKE_GENERATOR_PLATFORM}"
+        "-DCLI11_DIR=${CMAKE_INSTALL_PREFIX}" "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        "-DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}"
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/find_package_tests"
+      WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/find_package_tests")
+  else()
+    add_test(
+      NAME find-package-testsA
+      COMMAND
+        ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" "-DCLI11_DIR=${CMAKE_INSTALL_PREFIX}"
+        "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}" "-DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}"
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/find_package_tests"
+      WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/find_package_tests")
+  endif()
+
+  add_test(NAME find-package-testsB
+           COMMAND ${CMAKE_COMMAND} --build "${CMAKE_CURRENT_BINARY_DIR}/find_package_tests"
+                   --config ${CLI11_PACKAGE_TEST_BUILD_TYPE})
+
+  add_test(
+    NAME find-package-testsC
+    COMMAND ${CMAKE_CTEST_COMMAND} -C ${CLI11_PACKAGE_TEST_BUILD_TYPE}
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/find_package_tests")
+  set_property(TEST find-package-testsA PROPERTY LABELS Packaging)
+  set_property(TEST find-package-testsB PROPERTY LABELS Packaging)
+  set_property(TEST find-package-testsB PROPERTY DEPENDS find-package-testsA)
+  set_property(TEST find-package-testsC PROPERTY LABELS Packaging)
+  set_property(TEST find-package-testsC PROPERTY DEPENDS find-package-testsB)
+
+  if(NOT MSVC)
+    # Tests for other CMake projects using the package_config files
+    add_test(
+      package-config-tests
+      ${CMAKE_CTEST_COMMAND}
+      -C
+      --build-and-test
+      "${CMAKE_CURRENT_SOURCE_DIR}/package_config_tests"
+      "${CMAKE_CURRENT_BINARY_DIR}/package_config_tests"
+      --build-generator
+      "${CMAKE_GENERATOR}"
+      --build-generator-platform
+      "${CMAKE_GENERATOR_PLATFORM}"
+      --build-options
+      "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+      "-DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}"
+      "-DCLI11_DIR=${CMAKE_INSTALL_PREFIX}"
+      ${package_test_command})
+    set_property(TEST package-config-tests PROPERTY LABELS Packaging)
+  endif()
 endif()

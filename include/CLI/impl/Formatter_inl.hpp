@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2024, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -6,8 +6,10 @@
 
 #pragma once
 
+// IWYU pragma: private, include "CLI/CLI.hpp"
+
 // This include is only needed for IDEs to discover symbols
-#include <CLI/Formatter.hpp>
+#include "../Formatter.hpp"
 
 // [CLI11:public_includes:set]
 #include <algorithm>
@@ -132,7 +134,7 @@ CLI11_INLINE std::string Formatter::make_usage(const App *app, std::string name)
             << (app->get_require_subcommand_min() == 0 ? "]" : "");
     }
 
-    out << std::endl;
+    out << '\n';
 
     return out.str();
 }
